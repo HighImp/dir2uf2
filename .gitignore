@@ -1,3 +1,35 @@
 *.temp
 *.uf2
 *.bin
+
+# Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
+*.whl
+
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+ENV/
+
+# VS Code
+.vscode/
+
+# IDEs / editors
+.idea/
+*.swp
+*.swo
+
+# SCM Version Control
+src/dir2uf2/_version.py

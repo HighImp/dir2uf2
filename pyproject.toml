@@ -1,0 +1,39 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+
+requires = [
+    "setuptools>=42", "wheel", "setuptools_scm[toml]>=6.2"
+]
+
+[project]
+name = "dir2uf2"
+description = "Create and modify UF2 filesystem images for Raspberry Pi Pico"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "cython==0.29.37",
+    "littlefs-python==0.12.0",
+]
+dynamic = ["version"]
+
+[project.scripts]
+dir2uf2 = "dir2uf2.dir2uf2:main"
+dir2uf2-gui = "dir2uf2.gui:main"
+
+[project.optional-dependencies]
+gui = ["PyQt5"]
+test = [
+    "pytest>=7.0",
+    "pytest-qt>=4.2.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools_scm]
+write_to = "src/dir2uf2/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
