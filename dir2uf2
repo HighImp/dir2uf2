@@ -53,7 +53,7 @@ def uf2_section_data(data):
             break
 
         if args.debug:
-            print(f"Block {block_no}/{num_blocks} addr {addr:08x} size {size}")
+            print(f"Block {block_no + 1}/{num_blocks} addr {addr:08x} size {size}")
 
         if family_id == FAMILY_ID_ABS:
             # There's an extra four bytes beyond the DATA_SIZE of the FAMILY_ID_ABS
