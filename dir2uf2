@@ -91,6 +91,9 @@ def bin_to_uf2(sections):
                     ptr + offset, DATA_SIZE, block_no, total_blocks,
                     family_id)
 
+                if args.debug:
+                    print(f"Block {block_no}/{total_blocks} addr {ptr + offset:08x} data {chunk[0:16]}")
+
                 footer = struct.pack(b"<I", UF2_MAGIC_END)
 
                 block = header + chunk + DATA_PADDING + footer
@@ -272,6 +275,7 @@ if args.append_to is not None:
 
             # Flatten the block data generator
             block_data = list(block_data)
+            print(f"Section {section_index}, start: 0x{start_addr:08x}, family: 0x{family_id:08x}, flags: {flags}, num_blocks: {num_blocks}, data size: {len(block_data)}")
 
             # Grab the addresses from the block list and check they don't include
             # our filesystem region.
@@ -279,25 +283,23 @@ if args.append_to is not None:
             if args.fs_start in block_addresses and not args.fs_overwrite:
                 raise RuntimeError("Trying to append over an existing filesystem!")
 
-            # The generator returns the address and data chunk, but we're
-            # assuming the addresses are contiguous and discarding them!
-            # Discard any blocks >= to the filesystem start address, since
-            # if we hit this line and they exist they're getting replaced!
-            block_data = b"".join(b[1] for b in block_data if b[0] < args.fs_start)
-
             # If the section family ID matches RP2040 or RP2350 then append
             # our littlefs filesystem to that specific block.
             if family_id in (FAMILY_ID_RP2040, FAMILY_ID_RP2350):
                 if args.sparse:
-                    # Attempt to create a spare .uf2 without a zero fill between
-                    # the app and filesystem. Be careful to avoid RP2040 errata
-                    # E14 where non-block-aligned sparse .uf2s would not be
-                    # correctly written.
-                    fw_size = len(block_data)
-                    fw_size /= float(RP_FLASH_BLOCK_SIZE)
-                    fw_size = math.ceil(fw_size) * RP_FLASH_BLOCK_SIZE
+                    print("Building sparse uf2.")
 
-                    block_data = block_data.ljust(fw_size, b"\xff")
+                    last_address = block_data[0][0]
+                    last_section = last_address
+                    block_sections = {}
+                    block_sections[last_address] = b""
+                    for addr, data in block_data:
+                        if addr > last_address + DATA_SIZE:
+                            last_section = addr
+                            block_sections[last_section] = data
+                        else:
+                            block_sections[last_section] += data
+                        last_address = addr
 
                     # Align the start of the filesystem to the next block
                     fs_start -= start_addr
@@ -306,16 +308,26 @@ if args.append_to is not None:
                     fs_start += start_addr
                     fs_padding = fs_start - args.fs_start
 
+                    print(f"E14: Padding filesystem data from {len(lfs_data)} to {len(lfs_data) + fs_padding}")
                     lfs_data = lfs_data.rjust(len(lfs_data) + fs_padding, b"\xff")
 
+                    block_sections[fs_start] = lfs_data
+
                     # Add our filesystem to the flash section
+                    print(f"Output sections: Firmware: 0x{start_addr:08x} Filesystem: 0x{fs_start:08x}")
                     output_sections.append((
-                        (start_addr, fs_start),
-                        (block_data, lfs_data),
+                        tuple(block_sections.keys()),
+                        tuple(block_sections.values()),
                         family_id,
                         flags
                     ))
                 else:
+                    # The generator returns the address and data chunk, but we're
+                    # assuming the addresses are contiguous and discarding them!
+                    # Discard any blocks >= to the filesystem start address, since
+                    # if we hit this line and they exist they're getting replaced!
+                    block_data = b"".join(b[1] for b in block_data if b[0] < args.fs_start)
+
                     # If we're not sparse, then pad from the end of our firmware
                     # right up to the start of the filesystem
                     fw_size = fs_start - start_addr
