@@ -83,7 +83,6 @@ def bin_to_uf2(sections):
 
             for block_index in range(num_blocks):
                 ptr = DATA_SIZE * block_index
-
                 chunk = data[ptr:ptr + DATA_SIZE].rjust(DATA_SIZE, b"\x00")
                 header = struct.pack(
                     b"<IIIIIIII",
@@ -341,10 +340,13 @@ if args.append_to is not None:
                         flags
                     ))
 
-            # If the section family ID *dot not* match RP2040 or RP2350 then
+            # If the section family ID *does not* match RP2040 or RP2350 then
             # append this section unmangled. (Used for the first section in
             # RP2350 UF2 files)
+            # TODO: We're assuming the data is contiguous and joining all blocks
+            # given by the generator. Check this!
             else:
+                block_data = b"".join(b[1] for b in block_data)
                 output_sections.append((
                     start_addr,
                     block_data,
