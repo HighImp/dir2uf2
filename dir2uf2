@@ -21,6 +21,8 @@ FAMILY_ID_RP2040 = 0xe48bff56  # RP2040
 FAMILY_ID_PAD    = 0xe48bff57  # ???
 FAMILY_ID_RP2350 = 0xe48bff59  # RP2350
 
+PAD_EXTRA_BYTES = 4            # TODO: HUH!?
+
 RP_FLASH_BLOCK_SIZE = 4096
 
 BLOCK_SIZE = 512
@@ -51,7 +53,14 @@ def uf2_section_data(data):
         if args.debug:
             print(f"Block {block_no}/{num_blocks} addr {addr:08x} size {size}")
 
-        yield addr, data[offset + HEADER_SIZE:offset + HEADER_SIZE + DATA_SIZE]
+        if family_id == FAMILY_ID_PAD:
+            # There's an extra four bytes beyond the DATA_SIZE of the FAMILY_ID_PAD
+            # blocks. I don't know what this is, but if we don't preserve it we
+            # end up with an invalid UF2.
+            # bin_to_uf2 detects FAMILY_ID_PAD and writes this block verbatim.
+            yield addr, data[offset + HEADER_SIZE:offset + BLOCK_SIZE - FOOTER_SIZE]
+        else:
+            yield addr, data[offset + HEADER_SIZE:offset + HEADER_SIZE + DATA_SIZE]
 
 
 def bin_to_uf2(sections):
@@ -67,8 +76,28 @@ def bin_to_uf2(sections):
         # HACK: If we don't use "num_blocks + 1" then the 0xe48bff57
         # section at the top of RP2350 UF2 files will have a block count
         # of 1 and simply not flash, at all. I don't know why this is.
+        # Additionally these blocks have values *outside* of the normal
+        # DATA_SIZE region, so we must take care to flash the blocks
+        # verbatim rather than assuming a 255 byte payload.
+        # EG: the four bytes 04E35799 appear after the 255 byte boundary.
         if family_id == FAMILY_ID_PAD:
-            total_blocks += 1
+            block_no = 1
+            total_blocks = 2
+            data = datas[0]
+            offset = offsets[0]
+            header = struct.pack(
+                b"<IIIIIIII",
+                UF2_MAGIC_START0, UF2_MAGIC_START1, flags,
+                offset, DATA_SIZE, 0, total_blocks,
+                family_id)
+
+            if args.debug:
+                print(f"Block (Pad quirks mode!) {block_no}/{total_blocks} addr {offset:08x} data {data[0:16]}")
+
+            footer = struct.pack(b"<I", UF2_MAGIC_END)
+
+            yield header + data + footer
+            continue
 
         block_no = 0
 
@@ -347,6 +376,7 @@ if args.append_to is not None:
             # given by the generator. Check this!
             else:
                 block_data = b"".join(b[1] for b in block_data)
+                print(block_data)
                 output_sections.append((
                     start_addr,
                     block_data,
