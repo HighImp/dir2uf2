@@ -18,10 +18,12 @@ FS_SIZE          = 848 * 1024
 
 
 FAMILY_ID_RP2040 = 0xe48bff56  # RP2040
-FAMILY_ID_PAD    = 0xe48bff57  # ???
+FAMILY_ID_ABS    = 0xe48bff57  # "Absolute" family ID. This "block" is special.
 FAMILY_ID_RP2350 = 0xe48bff59  # RP2350
 
-PAD_EXTRA_BYTES = 4            # TODO: HUH!?
+# Found written *after* the data region, in the first four padding bytes.
+# See: https://github.com/raspberrypi/picotool/blob/25aa087b2c517b4901874a99536e869d4d27b678/elf2uf2/elf2uf2.cpp#L130-L158
+UF2_EXTENSION_RP2_IGNORE_BLOCK = 0x9957e304
 
 RP_FLASH_BLOCK_SIZE = 4096
 
@@ -53,11 +55,11 @@ def uf2_section_data(data):
         if args.debug:
             print(f"Block {block_no}/{num_blocks} addr {addr:08x} size {size}")
 
-        if family_id == FAMILY_ID_PAD:
-            # There's an extra four bytes beyond the DATA_SIZE of the FAMILY_ID_PAD
-            # blocks. I don't know what this is, but if we don't preserve it we
-            # end up with an invalid UF2.
-            # bin_to_uf2 detects FAMILY_ID_PAD and writes this block verbatim.
+        if family_id == FAMILY_ID_ABS:
+            # There's an extra four bytes beyond the DATA_SIZE of the FAMILY_ID_ABS
+            # blocks. RPi store "UF2_EXTENSION_RP2_IGNORE_BLOCK" here and we
+            # *must* preserve it.
+            # bin_to_uf2 detects FAMILY_ID_ABS and writes this block verbatim.
             yield addr, data[offset + HEADER_SIZE:offset + BLOCK_SIZE - FOOTER_SIZE]
         else:
             yield addr, data[offset + HEADER_SIZE:offset + HEADER_SIZE + DATA_SIZE]
@@ -79,8 +81,11 @@ def bin_to_uf2(sections):
         # Additionally these blocks have values *outside* of the normal
         # DATA_SIZE region, so we must take care to flash the blocks
         # verbatim rather than assuming a 255 byte payload.
+        # EG: RPi use UF2_EXTENSION_RP2_IGNORE_BLOCK to instruct picotool
+        # to ignore the ABSOLUTE_FAMILY_ID
+        # see: https://github.com/raspberrypi/pico-sdk/blob/a1438dff1d38bd9c65dbd693f0e5db4b9ae91779/src/common/boot_uf2_headers/include/boot/uf2.h#L46C9-L46C39
         # EG: the four bytes 04E35799 appear after the 255 byte boundary.
-        if family_id == FAMILY_ID_PAD:
+        if family_id == FAMILY_ID_ABS:
             block_no = 1
             total_blocks = 2
             data = datas[0]
@@ -376,7 +381,6 @@ if args.append_to is not None:
             # given by the generator. Check this!
             else:
                 block_data = b"".join(b[1] for b in block_data)
-                print(block_data)
                 output_sections.append((
                     start_addr,
                     block_data,
