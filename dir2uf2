@@ -146,6 +146,7 @@ parser.add_argument("--fs-size", type=int, default=None, help="Filesystem size."
 parser.add_argument("--fs-reserve", type=int, default=0, help="Size (in bytes) to reserve for other functions.")
 parser.add_argument("--fs-compact", action="store_true", help="Compact filesystem to used blocks.")
 parser.add_argument("--fs-overwrite", action="store_true", help="Replace an existing filesystem in the UF2.")
+parser.add_argument("--fs-blockdev", help="Prefer a specific block device for size auto-detection.")
 parser.add_argument("--sparse", action="store_true", help="Skip padding between app and filesystem.")
 parser.add_argument("--block-size", type=int, default=4096, help="LFS block size in Kb.")
 parser.add_argument("--read-size", type=int, default=256, help="LFS read size in Kb.")
@@ -168,9 +169,12 @@ if args.fs_start is None or args.fs_size is None:
     parsed = py_decl.parse()
     block_devices = parsed.get("BlockDevice", [])
     for block_device in block_devices:
+        fs_name = block_device.get("name")
+        if args.fs_blockdev is not None and args.fs_blockdev != fs_name:
+            continue
         args.fs_start = block_device.get("address")
         args.fs_size = block_device.get("size")
-        print(f"Auto detected fs: 0x{args.fs_start:08x} ({args.fs_start}), {args.fs_size} bytes.")
+        print(f"Auto detected fs: {fs_name} at 0x{args.fs_start:08x} ({args.fs_start}), {args.fs_size} bytes.")
         break
 
     # Apply filesystem size correction by removing reserved byte-count
