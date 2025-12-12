@@ -1,3 +1,4 @@
 *.temp
 *.uf2
 *.bin
+**/__pycache__
